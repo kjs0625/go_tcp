@@ -16,7 +16,7 @@ const (
 	SERVICE_3 = (10003)
 	SERVICE_4 = (10004)
 
-	MAX_PACKET_SIZE = 1024 * 8
+	MAX_PACKET_SIZE = 1024 * 1024
 )
 
 type PacketHeader struct {
