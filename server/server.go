@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -16,6 +15,8 @@ const (
 	SERVICE_2 = (10002)
 	SERVICE_3 = (10003)
 	SERVICE_4 = (10004)
+
+	MAX_PACKET_SIZE = 1024 * 8
 )
 
 type PacketHeader struct {
@@ -27,50 +28,15 @@ type Server struct {
 	address     string
 	listener    net.Listener
 	mu          sync.Mutex
-	clients     []net.Conn
+	clients     map[net.Conn]bool
 	readTimeout time.Duration
-}
-
-// util
-func SizeOf(value any) (size int) {
-	t := reflect.TypeOf(value)
-	v := reflect.ValueOf(value)
-
-	switch t.Kind() {
-	case reflect.Array:
-		elem := t.Elem()
-		size = int(elem.Size()) * v.Len()
-	case reflect.Struct:
-		sum := 0
-		for i, n := 0, v.NumField(); i < n; i++ {
-			s := SizeOf(v.Field(i).Interface())
-			if s < 0 {
-				break
-			}
-			sum += s
-		}
-		size = sum
-	case reflect.Int:
-		size = 4
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
-		size = int(t.Size())
-	case reflect.Slice:
-		size = v.Cap()
-	case reflect.Bool:
-		size = 1
-	default:
-	}
-
-	return size
 }
 
 func NewServer(address string, readTimeout time.Duration) *Server {
 	return &Server{
 		address:     address,
 		readTimeout: readTimeout,
-		clients:     make([]net.Conn, 0),
+		clients:     make(map[net.Conn]bool), // init map
 	}
 }
 
@@ -91,7 +57,7 @@ func (s *Server) Start() error {
 		fmt.Println("Client connected:", conn.RemoteAddr())
 
 		s.mu.Lock()
-		s.clients = append(s.clients, conn)
+		s.clients[conn] = true
 		s.mu.Unlock()
 
 		go s.Handler(conn)
@@ -99,7 +65,14 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Handler(conn net.Conn) {
-	defer conn.Close()
+	// clean up
+	defer func() {
+		conn.Close()
+		s.mu.Lock()
+		delete(s.clients, conn) // delete from map
+		s.mu.Unlock()
+		fmt.Println("Client disconnected cleanup: ", conn.RemoteAddr())
+	}()
 
 	for {
 		if err := conn.SetReadDeadline(time.Now().Add(s.readTimeout)); err != nil {
@@ -108,7 +81,7 @@ func (s *Server) Handler(conn net.Conn) {
 		}
 
 		header := &PacketHeader{}
-		headerBuffer := make([]byte, SizeOf(PacketHeader{}))
+		headerBuffer := make([]byte, binary.Size(header))
 
 		_, err := io.ReadFull(conn, headerBuffer)
 		if err != nil {
@@ -126,6 +99,11 @@ func (s *Server) Handler(conn net.Conn) {
 			return
 		}
 
+		if header.UiPacketSize > MAX_PACKET_SIZE {
+			fmt.Printf("Error: Packet size too large (%d)\n", header.UiPacketSize)
+			return
+		}
+
 		payloadBuffer := make([]byte, header.UiPacketSize)
 		_, err = io.ReadFull(conn, payloadBuffer)
 		if err != nil {
@@ -138,40 +116,52 @@ func (s *Server) Handler(conn net.Conn) {
 			}
 		}
 
-		s.HandleServicePacket(header, payloadBuffer)
+		s.HandleServicePacket(header.UsPacketType, payloadBuffer)
 	}
 }
 
-func (s *Server) HandleServicePacket(header *PacketHeader, payload []byte) {
-	switch header.UsPacketType {
+func (s *Server) HandleServicePacket(packetType uint16, payload []byte) {
+	switch packetType {
 	case SERVICE_1:
 		s.HandleService1(payload)
 	case SERVICE_2:
 		s.HandleService2(payload)
 	case SERVICE_3:
 		s.HandleService3(payload)
+	default:
+		fmt.Println("Unknown packet type: ", packetType)
 	}
 }
 
 func (s *Server) HandleService1(payLoad []byte) {
 	fmt.Println("HandleService1")
+	fmt.Println(string(payLoad))
 }
 
 func (s *Server) HandleService2(payLoad []byte) {
 	fmt.Println("HandleService2")
+	fmt.Println(string(payLoad))
 }
 
 func (s *Server) HandleService3(payLoad []byte) {
 	fmt.Println("HandleService3")
+	fmt.Println(string(payLoad))
 }
 
 func (s *Server) Stop() {
 	fmt.Println("Shutting down server...")
 	s.mu.Lock()
-	for _, conn := range s.clients {
+	defer s.mu.Unlock()
+
+	// close listener first
+	if s.listener != nil {
+		s.listener.Close()
+	}
+
+	// close conn's
+	for conn := range s.clients {
 		conn.Close()
 	}
-	s.listener.Close()
-	s.mu.Unlock()
+	s.clients = make(map[net.Conn]bool) // init map
 	fmt.Println("Server shut down")
 }
