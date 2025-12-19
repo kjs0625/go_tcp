@@ -8,21 +8,9 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"tcp/protocol"
 )
-
-const (
-	SERVICE_1 = (10001)
-	SERVICE_2 = (10002)
-	SERVICE_3 = (10003)
-	SERVICE_4 = (10004)
-
-	MAX_PACKET_SIZE = 1024 * 1024
-)
-
-type PacketHeader struct {
-	UiPacketSize uint32
-	UsPacketType uint16
-}
 
 type Server struct {
 	address     string
@@ -80,7 +68,7 @@ func (s *Server) Handler(conn net.Conn) {
 			return
 		}
 
-		header := &PacketHeader{}
+		header := &protocol.PacketHeader{}
 		headerBuffer := make([]byte, binary.Size(header))
 
 		_, err := io.ReadFull(conn, headerBuffer)
@@ -99,7 +87,7 @@ func (s *Server) Handler(conn net.Conn) {
 			return
 		}
 
-		if header.UiPacketSize > MAX_PACKET_SIZE {
+		if header.UiPacketSize > protocol.MAX_PACKET_SIZE {
 			fmt.Printf("Error: Packet size too large (%d)\n", header.UiPacketSize)
 			return
 		}
@@ -122,11 +110,11 @@ func (s *Server) Handler(conn net.Conn) {
 
 func (s *Server) HandleServicePacket(packetType uint16, payload []byte) {
 	switch packetType {
-	case SERVICE_1:
+	case protocol.SERVICE_1:
 		s.HandleService1(payload)
-	case SERVICE_2:
+	case protocol.SERVICE_2:
 		s.HandleService2(payload)
-	case SERVICE_3:
+	case protocol.SERVICE_3:
 		s.HandleService3(payload)
 	default:
 		fmt.Println("Unknown packet type: ", packetType)
