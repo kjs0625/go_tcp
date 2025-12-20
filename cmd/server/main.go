@@ -19,7 +19,7 @@ func main() {
 	go func() {
 		fmt.Println("Starting TCP Server...")
 		if err := srv.Start(); err != nil {
-			fmt.Printf("Error starting server: %v\n, err")
+			fmt.Printf("Error starting server: %v\n", err)
 		}
 	}()
 
