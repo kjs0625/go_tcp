@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -39,6 +40,10 @@ func (s *Server) Start() error {
 	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				fmt.Println("Accept loop closed (Normal Shutdonw)")
+				return nil
+			}
 			fmt.Println("Error accepting connection", err)
 			continue
 		}

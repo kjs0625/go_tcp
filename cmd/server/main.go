@@ -27,7 +27,13 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	<-sigChan
+	sig := <-sigChan
+	switch sig {
+	case os.Interrupt:
+		fmt.Println("Exit with os.Interrupt")
+	case syscall.SIGTERM:
+		fmt.Println("Exit with syscall.SIGTERM")
+	}
 
 	fmt.Println("Shutdown signal received...")
 	srv.Stop()
