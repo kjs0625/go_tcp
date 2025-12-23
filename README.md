@@ -7,7 +7,8 @@
 ## Installation
 ```Bash
 go mod init tcp
-go mod tidy```
+go mod tidy
+```
 
 ## 📡 Protocol Specification
 
